@@ -1,0 +1,25 @@
+This is pdfTeX, Version 3.14159265-2.6-1.40.21 (TeX Live 2020/W32TeX) (preloaded format=pdftex 2020.9.10)  8 APR 2021 12:38
+entering extended mode
+ restricted \write18 enabled.
+ %&-line parsing enabled.
+**KLPS4_E+_earnings_consumption_main_byage.tex
+(./KLPS4_E+_earnings_consumption_main_byage.tex)
+Runaway argument?
+ \toprule &\multicolumn {1}{c}{(1)} &\multicolumn {1}{c}{(2)} &\multicolumn \ET
+C.
+! File ended while scanning use of \\.
+<inserted text> 
+                \par 
+<*> KLPS4_E+_earnings_consumption_main_byage.tex
+                                                
+? 
+
+*
+(Please type a command or say `\end')
+*\end
+No pages of output.
+PDF statistics:
+ 0 PDF objects out of 1000 (max. 8388607)
+ 0 named destinations out of 1000 (max. 500000)
+ 1 words of extra memory for PDF output out of 10000 (max. 10000000)
+

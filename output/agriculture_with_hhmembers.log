@@ -1,0 +1,20 @@
+--------------------------------------------------------------------------------
+      name:  <unnamed>
+       log:  //Client/C$/Users/keanu\Desktop\OPA\Reproduction of Twenty year eco
+> nomic impacts of deworming/output/agriculture_with_hhmembers.log
+  log type:  text
+ opened on:   8 Apr 2021, 11:32:37
+
+.         
+.         use "$data/Worms20_Analysis.dta",clear
+
+.         summ hhmember_work_ag if farm_work_12m!=0  [aw=weight] //70% of househ
+> olds (where the focus respondent worked in ag. in the last 12 months) have at 
+> least 1 other hh member working in this agricultural activity
+
+    Variable |     Obs      Weight        Mean   Std. Dev.       Min        Max
+-------------+-----------------------------------------------------------------
+hhmember_w~g |   2,172  7913.28502    .6998775   .4584166          0          1
+
+. 
+.         cap log close

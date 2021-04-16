@@ -23,10 +23,11 @@ set more off
 gen outcome=""
 gen pval=.
 
-tempfile pval_all pval_gender pval_age
+tempfile pval_all pval_gender pval_age pval_age_gender
 save `pval_all'
 save `pval_gender'
 save `pval_age'
+save `pval_age_gender'
 
 //Use pooled data
 use "$data/Worms20_Analysis.dta",clear
@@ -145,6 +146,86 @@ foreach outcome of local outcomes_FDR {
 			append using `pval_age'
 			save `pval_age',replace
 		restore
+		
+	//YOUNGER FEMALE
+		use `all_data',clear
+		drop if older==.
+		eststo: reg `outcome'  treatment treatXolder costXolder satXolder older treatXmale costXmale satXmale cost_sharing saturation_dm avgtest96 pup_pop demeaned_popT_6k zoneidI2-zoneidI8 male std98_base_I2-std98_base_I6 month_interviewI2-month_interviewI12 wave2 i.year voced [pw=weight], cluster(psdpsch98)
+		
+		local t = _b[treatment]/_se[treatment]
+		local pvalue = 2*ttail(e(df_r),abs(`t'))	
+		*saving all p-values in dataset for FDR adjustment
+		preserve
+			gen outcome = "`outcome'"
+			gen pval = `pvalue'
+			gen pval_oldfem = 0
+			
+			keep outcome pval pval_oldfem
+			duplicates drop
+			
+			append using `pval_age_gender'
+			save `pval_age_gender',replace
+		restore
+		
+	//OLDER FEMALE
+		use `all_data', clear
+		drop if older==.
+		eststo: reg `outcome' treatment treatXmale costXmale satXmale treatXyounger costXyounger satXyounger younger cost_sharing saturation_dm avgtest96 pup_pop demeaned_popT_6k zoneidI2-zoneidI8 male std98_base_I2-std98_base_I6 month_interviewI2-month_interviewI12 wave2 i.year voced [pw=weight], cluster(psdpsch98)
+		
+		local t = _b[treatment]/_se[treatment]
+		local pvalue = 2*ttail(e(df_r),abs(`t'))	
+		*saving all p-values in dataset for FDR adjustment
+		preserve
+			gen outcome = "`outcome'"
+			gen pval = `pvalue'
+			gen pval_oldfem = 0
+			
+			keep outcome pval pval_oldfem
+			duplicates drop
+			
+			append using `pval_age_gender'
+			save `pval_age_gender',replace
+		restore
+		
+	//YOUNGER MALE
+		use `all_data', clear
+		drop if older==.
+		eststo: reg `outcome' treatment treatXfemale costXfemale satXfemale treatXolder costXolder satXolder older $x_controls_panel [pw=weight], cluster(psdpsch98)
+		
+		local t = _b[treatment]/_se[treatment]
+		local pvalue = 2*ttail(e(df_r),abs(`t'))	
+		*saving all p-values in dataset for FDR adjustment
+		preserve
+			gen outcome = "`outcome'"
+			gen pval = `pvalue'
+			gen pval_youngmale = 0
+			
+			keep outcome pval pval_youngmale
+			duplicates drop
+			
+			append using `pval_age_gender'
+			save `pval_age_gender',replace
+		restore
+		
+	//OLDER MALE
+		use `all_data', clear
+		drop if older==.
+		eststo: reg `outcome' treatment treatXfemale costXfemale satXfemale treatXyounger costXyounger satXyounger younger $x_controls_panel [pw=weight], cluster(psdpsch98)
+		
+		local t = _b[treatment]/_se[treatment]
+		local pvalue = 2*ttail(e(df_r),abs(`t'))	
+		*saving all p-values in dataset for FDR adjustment
+		preserve
+			gen outcome = "`outcome'"
+			gen pval = `pvalue'
+			gen pval_oldmale = 0
+			
+			keep outcome pval pval_oldmale
+			duplicates drop
+			
+			append using `pval_age_gender'
+			save `pval_age_gender',replace
+		restore
 }
 
 use `pval_age',clear
@@ -170,6 +251,13 @@ preserve
 		keep outcome pval_old qval_fdr
 		tempfile qval_age
 		save `qval_age'	
+		
+	//Age & gender
+		fdr_adjustment "`pval_age_gender'"
+		keep outcome pval_oldfem pval_oldmale pval_youngmale qval_fdr
+		tempfile qval_age_gender
+		save `qval_age_gender'
+	
 restore
 
 estimates drop _all	
@@ -189,6 +277,15 @@ use "$data/Worms20_Analysis.dta",clear
 	gen treatXolder = treatment * older
 	gen costXolder = cost_sharing * older
 	gen satXolder = saturation_dm * older
+	
+// Robustness interaction terms
+	gen treatXoldfem = treatment * older * female
+	gen costXoldfem = cost_sharing * older * female
+	gen satXoldfem = saturation_dm * older * female
+
+	gen treatXoldmale = treatment * older * male
+	gen costXoldmale = cost_sharing * older * male
+	gen satXoldmale = saturation_dm * older * male
 
 //Run regressions	
 foreach outcome in tot_cnsp_t {
@@ -361,6 +458,149 @@ foreach outcome in tot_cnsp_t {
 		merge 1:1 outcome pval_old using `qval_age',keep(3) nogen
 		estadd scalar qval = qval_fdr
 	restore
+	
+	//COL 6: OLDER FEMALE
+	sum `outcome' if treatment==0 & older==1 & female==1 [aw=weight]
+	local controlMean = r(mean)
+	
+	reg `outcome' treatment older treatXoldfem costXoldfem satXoldfem $x_controls_panel [pw=weight], cluster(psdpsch98)
+	
+	count if e(sample) & older==1 & female==1
+	local numobs = r(N)
+	
+	lincom treatment + treatXoldfem
+	local treat_oldfem = r(estimate)
+	local se_oldfem = r(se)
+	cap matrix drop b
+	cap matrix drop se
+	matrix b = `treat_oldfem'
+	matrix se = `se_oldfem'
+	matrix colnames b = treatment
+	matrix colnames se = treatment
+	ereturn post b [aw=weight], depname(treatment)
+	estadd matrix se
+	eststo
+	
+	*add scalars
+	estadd scalar control_mean = round(`controlMean', 1)
+	local teffect = 100*(`treat_oldfem'/`controlMean')
+	estadd scalar t_effect = round(`teffect', .01)
+	
+	local t = `treat_oldfem'/`se_oldfem'
+	local pvalue = 2*ttail(r(df), abs(`t'))
+	estadd scalar pvalue = round(`pvalue', .001)
+	
+	estadd scalar N_ind = `numobs'
+	
+	*FDR q-value
+	preserve
+		gen outcome="`outcome'"
+		gen pval_oldfem=1
+		keep outcome pval_oldfem
+		duplicates drop
+		merge 1:1 outcome pval_oldfem using `qval_age_gender',keep(3) nogen
+		estadd scalar qval = qval_fdr
+	restore
+	
+	//COL 7: YOUNGER FEMALE
+	sum `outcome' if treatment==0 & older==0 & female==1 [aw=weight]
+	local controlmean = r(mean)
+	eststo: reg `outcome' older treatment treatXoldfem costXoldfem satXoldfem $x_controls_panel [pw=weight], cluster(psdpsch98)
+	
+	*add scalars
+	estadd scalar control_mean = round(`controlMean', 1)
+	local treat = _b[treatment]
+	local teffect = 100*(`treat'/`controlMean')
+	estadd scalar t_effect = round(`teffect', .01)
+
+	local t = `treat'/_se[treatment]
+	local pvalue = 2*ttail(e(df_r),abs(`t'))
+	estadd scalar pvalue = round(`pvalue',.001)
+	
+	count if e(sample) & older==0 & female==1
+	estadd scalar N_ind=r(N)
+	
+	*FDR q-value
+	preserve
+		gen outcome="`outcome'"
+		gen pval_old=0
+		keep outcome pval_old
+		duplicates drop
+		merge 1:1 outcome pval_old using `qval_age_gender',keep(3) nogen
+		estadd scalar qval = qval_fdr
+	restore
+	
+	//COL 8: OLDER MALE
+	sum `outcome' if treatment==0 & older==1 & female==0 [aw=weight]
+	local controlMean = r(mean)
+	
+	reg `outcome' treatment older treatXoldmale costXoldmale satXoldmale $x_controls_panel [pw=weight], cluster(psdpsch98)
+	count if e(sample) & older==1 & female==0
+	local numobs = r(N)
+	
+	lincom treatment + treatXoldfem
+	local treat_oldmale = r(estimate)
+	local se_oldmale = r(se)
+	cap matrix drop b
+	cap matrix drop se
+	matrix b = `treat_oldmale'
+	matrix se = `se_oldmale'
+	matrix colnames b = treatment
+	matrix colnames se = treatment
+	ereturn post b [aw=weight], depname(treatment)
+	estadd matrix se
+	eststo
+	
+	*add scalars
+	estadd scalar control_mean = round(`controlMean', 1)
+	local teffect = 100*(`treat_oldmale'/`controlMean')
+	estadd scalar t_effect = round(`teffect', .01)
+	
+	local t = `treat_oldmale'/`se_oldmale'
+	local pvalue = 2*ttail(r(df), abs(`t'))
+	estadd scalar pvalue = round(`pvalue', .001)
+	
+	estadd scalar N_ind = `numobs'
+	
+	*FDR q-value
+	preserve
+		gen outcome="`outcome'"
+		gen pval_oldmale=1
+		keep outcome pval_oldmale
+		duplicates drop
+		merge 1:1 outcome pval_oldmale using `qval_age_gender',keep(3) nogen
+		estadd scalar qval = qval_fdr
+	restore
+	
+	//COL 9: YOUNGER MALE
+	sum `outcome' if treatment==0 & older==0 & female==0 [aw=weight]
+	local controlmean = r(mean)
+	eststo: reg `outcome' older treatment treatXoldmale costXoldmale satXoldmale $x_controls_panel [pw=weight], cluster(psdpsch98)
+	
+	*add scalars
+	estadd scalar control_mean = round(`controlMean', 1)
+	local treat = _b[treatment]
+	local teffect = 100*(`treat'/`controlMean')
+	estadd scalar t_effect = round(`teffect', .01)
+
+	local t = `treat'/_se[treatment]
+	local pvalue = 2*ttail(e(df_r),abs(`t'))
+	estadd scalar pvalue = round(`pvalue',.001)
+	
+	count if e(sample) & older==0 & female==0
+	estadd scalar N_ind=r(N)
+	
+	*FDR q-value
+	preserve
+		gen outcome="`outcome'"
+		gen pval_old=0
+		keep outcome pval_old
+		duplicates drop
+		merge 1:1 outcome pval_old using `qval_age_gender',keep(3) nogen
+		estadd scalar qval = qval_fdr
+	restore
+	
+	
 }
 
 //Output table
